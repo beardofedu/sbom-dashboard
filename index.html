@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SBOM Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .badge { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium; }
+    .spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-900">
+
+  <!-- Header -->
+  <header class="bg-gray-900 text-white shadow">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center gap-3">
+      <svg class="w-7 h-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+      <div>
+        <h1 class="text-xl font-bold">SBOM Dashboard</h1>
+        <p class="text-gray-400 text-sm">GitHub Dependency Graph · SPDX 2.3</p>
+      </div>
+      <div class="ml-auto flex gap-2">
+        <a href="https://github.com/beardofedu/sbom-example-node" target="_blank"
+          class="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-md transition">
+          sbom-example-node ↗
+        </a>
+        <a href="https://github.com/beardofedu/sbom-example-python" target="_blank"
+          class="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-md transition">
+          sbom-example-python ↗
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- Status bar -->
+    <div id="status-bar" class="flex items-center gap-2 text-sm text-gray-500">
+      <svg id="status-spinner" class="spinner w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+        </path>
+      </svg>
+      <span id="status-text">Loading SBOMs…</span>
+    </div>
+
+    <!-- Summary cards -->
+    <div id="summary-cards" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wide">Repos</p>
+        <p id="card-repos" class="text-3xl font-bold mt-1">2</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wide">Total Packages</p>
+        <p id="card-total" class="text-3xl font-bold mt-1">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wide">Unique Licenses</p>
+        <p id="card-licenses" class="text-3xl font-bold mt-1">—</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <p class="text-xs text-gray-500 uppercase tracking-wide">Shared Licenses</p>
+        <p id="card-shared-lic" class="text-3xl font-bold mt-1">—</p>
+      </div>
+    </div>
+
+    <!-- Search + filter -->
+    <div id="controls" class="hidden flex flex-wrap gap-3 items-center">
+      <input id="search" type="text" placeholder="Search packages…"
+        class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <select id="filter-repo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="all">All repos</option>
+        <option value="node">sbom-example-node</option>
+        <option value="python">sbom-example-python</option>
+      </select>
+      <select id="filter-license" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="all">All licenses</option>
+      </select>
+      <span id="result-count" class="text-sm text-gray-500 ml-auto"></span>
+    </div>
+
+    <!-- Main table -->
+    <div id="table-wrap" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
+          <tr>
+            <th class="px-4 py-3 text-left">Package</th>
+            <th class="px-4 py-3 text-left">Version</th>
+            <th class="px-4 py-3 text-left">Ecosystem</th>
+            <th class="px-4 py-3 text-left">License</th>
+            <th class="px-4 py-3 text-left">Repos</th>
+          </tr>
+        </thead>
+        <tbody id="table-body" class="divide-y divide-gray-100"></tbody>
+      </table>
+    </div>
+
+    <!-- Side-by-side comparison -->
+    <div id="comparison" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Node repo -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-yellow-50 border-b border-gray-200 px-4 py-3 flex items-center gap-2">
+          <span class="text-lg">🟨</span>
+          <div>
+            <p class="font-semibold text-sm">sbom-example-node</p>
+            <p class="text-xs text-gray-500">Node.js · npm</p>
+          </div>
+          <span id="node-count" class="ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-medium"></span>
+        </div>
+        <ul id="node-list" class="divide-y divide-gray-100 text-sm"></ul>
+      </div>
+
+      <!-- Python repo -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="bg-blue-50 border-b border-gray-200 px-4 py-3 flex items-center gap-2">
+          <span class="text-lg">🐍</span>
+          <div>
+            <p class="font-semibold text-sm">sbom-example-python</p>
+            <p class="text-xs text-gray-500">Python · PyPI</p>
+          </div>
+          <span id="python-count" class="ml-auto text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-medium"></span>
+        </div>
+        <ul id="python-list" class="divide-y divide-gray-100 text-sm"></ul>
+      </div>
+    </div>
+
+    <!-- License breakdown -->
+    <div id="license-section" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+      <h2 class="font-semibold text-base mb-4">License Breakdown</h2>
+      <div id="license-bars" class="space-y-3"></div>
+    </div>
+
+    <!-- Error -->
+    <div id="error-box" class="hidden bg-red-50 border border-red-200 rounded-xl p-5 text-red-800 text-sm"></div>
+
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 py-6 text-center text-xs text-gray-400">
+    SBOM data sourced from <code>sbom/sbom.spdx.json</code> in each repo · Updated automatically via GitHub Actions ·
+    <a href="https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/exporting-a-software-bill-of-materials-for-your-repository"
+      class="underline" target="_blank">Learn about GitHub SBOMs</a>
+  </footer>
+
+<script>
+const REPOS = [
+  {
+    key: 'node',
+    name: 'sbom-example-node',
+    owner: 'beardofedu',
+    url: 'https://raw.githubusercontent.com/beardofedu/sbom-example-node/main/sbom/sbom.spdx.json',
+    color: 'yellow',
+    ecosystem: 'npm',
+  },
+  {
+    key: 'python',
+    name: 'sbom-example-python',
+    owner: 'beardofedu',
+    url: 'https://raw.githubusercontent.com/beardofedu/sbom-example-python/main/sbom/sbom.spdx.json',
+    color: 'blue',
+    ecosystem: 'pypi',
+  },
+];
+
+const LICENSE_COLORS = {
+  'MIT': 'bg-green-100 text-green-800',
+  'BSD-2-Clause': 'bg-teal-100 text-teal-800',
+  'BSD-3-Clause': 'bg-teal-100 text-teal-800',
+  'Apache-2.0': 'bg-blue-100 text-blue-800',
+  'ISC': 'bg-purple-100 text-purple-800',
+  'CC0-1.0': 'bg-gray-100 text-gray-700',
+  'NOASSERTION': 'bg-gray-100 text-gray-500',
+};
+
+function licenseClass(lic) {
+  return LICENSE_COLORS[lic] || 'bg-orange-100 text-orange-800';
+}
+
+function extractPackages(sbom) {
+  return (sbom.packages || []).filter(p => {
+    // Skip the root "repo" package itself
+    const purl = p.externalRefs?.find(r => r.referenceType === 'purl')?.referenceLocator || '';
+    return !purl.startsWith('pkg:github/');
+  });
+}
+
+function ecosystemFromPurl(purl) {
+  if (!purl) return '—';
+  const match = purl.match(/^pkg:([^/]+)\//);
+  return match ? match[1] : '—';
+}
+
+let allPackages = []; // { name, version, license, ecosystem, repos: Set }
+let repoData = {};
+
+async function fetchSbom(repo) {
+  const res = await fetch(repo.url);
+  if (!res.ok) throw new Error(`Failed to fetch SBOM for ${repo.name}: ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function setStatus(msg, done = false) {
+  document.getElementById('status-text').textContent = msg;
+  if (done) document.getElementById('status-spinner').classList.add('hidden');
+}
+
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+  setStatus('Error loading SBOMs', true);
+}
+
+function renderTable(packages) {
+  const body = document.getElementById('table-body');
+  body.innerHTML = '';
+  packages.forEach(pkg => {
+    const repoTags = [...pkg.repos].map(r => {
+      const repo = REPOS.find(x => x.key === r);
+      const cls = r === 'node'
+        ? 'bg-yellow-100 text-yellow-800'
+        : 'bg-blue-100 text-blue-800';
+      return `<span class="badge ${cls}">${repo.name}</span>`;
+    }).join(' ');
+
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-gray-50 transition-colors';
+    row.dataset.name = pkg.name.toLowerCase();
+    row.dataset.repo = [...pkg.repos].join(',');
+    row.dataset.license = pkg.license;
+    row.innerHTML = `
+      <td class="px-4 py-3 font-medium">${pkg.name}</td>
+      <td class="px-4 py-3 text-gray-500 font-mono text-xs">${pkg.version}</td>
+      <td class="px-4 py-3">
+        <span class="badge bg-gray-100 text-gray-700">${pkg.ecosystem}</span>
+      </td>
+      <td class="px-4 py-3">
+        <span class="badge ${licenseClass(pkg.license)}">${pkg.license}</span>
+      </td>
+      <td class="px-4 py-3">${repoTags}</td>
+    `;
+    body.appendChild(row);
+  });
+}
+
+function renderSideLists() {
+  ['node', 'python'].forEach(key => {
+    const pkgs = repoData[key] || [];
+    const list = document.getElementById(`${key}-list`);
+    const count = document.getElementById(`${key}-count`);
+    count.textContent = `${pkgs.length} packages`;
+    list.innerHTML = pkgs.map(p => `
+      <li class="px-4 py-2.5 flex items-center justify-between gap-2">
+        <span class="font-medium truncate">${p.name}</span>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <span class="text-gray-400 text-xs font-mono">${p.version}</span>
+          <span class="badge ${licenseClass(p.license)}">${p.license}</span>
+        </div>
+      </li>
+    `).join('');
+  });
+}
+
+function renderLicenseBars(packages) {
+  const counts = {};
+  packages.forEach(p => {
+    counts[p.license] = (counts[p.license] || 0) + 1;
+  });
+  const total = packages.length;
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+  const container = document.getElementById('license-bars');
+  container.innerHTML = sorted.map(([lic, count]) => {
+    const pct = Math.round((count / total) * 100);
+    return `
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="badge ${licenseClass(lic)}">${lic}</span>
+          <span class="text-gray-500">${count} package${count !== 1 ? 's' : ''} (${pct}%)</span>
+        </div>
+        <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-2 bg-blue-400 rounded-full" style="width:${pct}%"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function populateLicenseFilter(packages) {
+  const licenses = [...new Set(packages.map(p => p.license))].sort();
+  const sel = document.getElementById('filter-license');
+  licenses.forEach(lic => {
+    const opt = document.createElement('option');
+    opt.value = lic;
+    opt.textContent = lic;
+    sel.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const repoFilter = document.getElementById('filter-repo').value;
+  const licenseFilter = document.getElementById('filter-license').value;
+
+  const rows = document.querySelectorAll('#table-body tr');
+  let visible = 0;
+  rows.forEach(row => {
+    const nameMatch = row.dataset.name.includes(search);
+    const repoMatch = repoFilter === 'all' || row.dataset.repo.includes(repoFilter);
+    const licMatch = licenseFilter === 'all' || row.dataset.license === licenseFilter;
+    const show = nameMatch && repoMatch && licMatch;
+    row.classList.toggle('hidden', !show);
+    if (show) visible++;
+  });
+  document.getElementById('result-count').textContent = `${visible} package${visible !== 1 ? 's' : ''}`;
+}
+
+async function init() {
+  try {
+    const results = await Promise.allSettled(REPOS.map(fetchSbom));
+
+    const packageMap = new Map(); // name+version -> pkg record
+
+    results.forEach((result, i) => {
+      const repo = REPOS[i];
+      if (result.status === 'rejected') {
+        console.warn(`Could not load ${repo.name}:`, result.reason);
+        repoData[repo.key] = [];
+        return;
+      }
+      const sbom = result.value;
+      const pkgs = extractPackages(sbom);
+      const repoPkgs = [];
+
+      pkgs.forEach(p => {
+        const purl = p.externalRefs?.find(r => r.referenceType === 'purl')?.referenceLocator || '';
+        const eco = ecosystemFromPurl(purl);
+        const key = `${p.name}@${p.versionInfo}`;
+        if (!packageMap.has(key)) {
+          packageMap.set(key, {
+            name: p.name,
+            version: p.versionInfo || 'unknown',
+            license: p.licenseConcluded || 'NOASSERTION',
+            ecosystem: eco,
+            repos: new Set(),
+          });
+        }
+        packageMap.get(key).repos.add(repo.key);
+        repoPkgs.push({ name: p.name, version: p.versionInfo || 'unknown', license: p.licenseConcluded || 'NOASSERTION' });
+      });
+
+      repoData[repo.key] = repoPkgs;
+    });
+
+    allPackages = [...packageMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+    // Summary cards
+    const totalPkgs = allPackages.length;
+    const uniqueLicenses = new Set(allPackages.map(p => p.license)).size;
+    const sharedLicenses = [...new Set(
+      allPackages.flatMap(p => [...p.repos])
+        .filter((v, i, a) => a.indexOf(v) !== i)
+    )].length;
+
+    document.getElementById('card-total').textContent = totalPkgs;
+    document.getElementById('card-licenses').textContent = uniqueLicenses;
+    document.getElementById('card-shared-lic').textContent =
+      [...new Set(allPackages.map(p => p.license))].length;
+
+    // Show UI
+    ['summary-cards', 'controls', 'table-wrap', 'comparison', 'license-section']
+      .forEach(id => document.getElementById(id).classList.remove('hidden'));
+
+    renderTable(allPackages);
+    renderSideLists();
+    renderLicenseBars(allPackages);
+    populateLicenseFilter(allPackages);
+
+    document.getElementById('result-count').textContent =
+      `${allPackages.length} packages`;
+
+    document.getElementById('search').addEventListener('input', applyFilters);
+    document.getElementById('filter-repo').addEventListener('change', applyFilters);
+    document.getElementById('filter-license').addEventListener('change', applyFilters);
+
+    setStatus(`Loaded ${totalPkgs} packages from ${REPOS.length} repos · SPDX 2.3`, true);
+
+  } catch (err) {
+    showError(`Error: ${err.message}`);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

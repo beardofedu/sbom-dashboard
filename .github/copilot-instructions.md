@@ -48,7 +48,12 @@ const REPOS = [
 ];
 ```
 
-Also add a matching `<option>` to the `#filter-repo` `<select>` and a side-list `<div>` in the comparison section.
+Also update the parts of `index.html` that are currently hard-coded for `node` and `python`:
+
+- add a matching `<option>` to the `#filter-repo` `<select>`
+- add a comparison panel (`<div>`, count span, and package list elements) for the new repo in the side-by-side comparison section
+- include the new repo key in `renderSideLists()`
+- update the repo-tag styling in `renderTable()` so badges render correctly for the new repo
 
 ## Coding Conventions
 
